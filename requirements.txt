@@ -1,0 +1,4 @@
+pafy
+discord.py
+opencv-python
+python-dotenv

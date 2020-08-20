@@ -1,90 +1,101 @@
-# Discord Imports
-import discord
-from discord.ext import commands
-import datetime
-
-# System Imports
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
 import os
 import time
-from PIL import Image
+from datetime import datetime as dt
 
-client = commands.Bot(command_prefix='!')
-client.remove_command('help')
+import pafy
+import cv2
+import discord
+from discord.ext import commands, tasks
+from dotenv import load_dotenv
 
-TOKEN = 'TOKEN'
+load_dotenv()
+bot = commands.Bot(command_prefix='!', help_command=None)
+SCREENSHOT_SAVE_LOCATION = os.getcwd()
+url_dict = {
+    'r1-peek': os.getenv('TRACK1_URL'),
+    'r2-peek': os.getenv('TRACK2_URL'),
+    'r3-peek': os.getenv('TRACK3_URL'),
+    'test-peek': os.getenv('TRACK1_URL')
+}
+event_dict = {
+    'r1-peek': None,
+    'r2-peek': None,
+    'r3-peek': None,
+    'test-peek': None
+}
 
 # ---------------------------------------
 # Bot Initialization
 # ---------------------------------------
-@client.event
+@bot.event
 async def on_ready():
     print('Bot is ready.')
 
 
 # ---------------------------------------
+# Capture function
+# ---------------------------------------
+@tasks.loop(minutes=float(os.getenv('DEFAULT_INTERVAL')))
+async def capture(ctx, channel):
+    url = url_dict[channel]
+    print(url)
+
+    vPafy = pafy.new(url)
+    play = vPafy.getbest()
+    
+    cap = cv2.VideoCapture(play.url)
+    ret, img = cap.read()
+
+    now = dt.now()
+    str_time = now.strftime("%Y%m%d_%H%M")
+    path = f"{SCREENSHOT_SAVE_LOCATION}/Screenshots/{channel}_{str_time}.png"
+    cv2.imwrite(path, img)
+    await ctx.send(file=discord.File(path))
+    cap.release()
+    print(f'{str_time} screenshots taken')
+
+
+# ---------------------------------------
 # Command
 # ---------------------------------------
-@client.command()
-async def command(ctx, *, message):
-    # Opens the website with the given url
-    url = message
-    screenshot_number = 0
-
-    driver = webdriver.Chrome(executable_path="CHROME DRIVER LOCATION/Python/Python37-32/Drivers/chromedriver.exe")
-    driver.maximize_window()
-
-    if url[0] != "h" and url[1] != "t" and url[2] != "t" and url[3] != "p" and url[4] != "s" and url[5] != ":" and url[6] != "/" and url[7] != "/":
-        url = "https://" + url
-
-    driver.get(url)
-    element = driver.find_element_by_tag_name('html')
-
-    # Creates the screenhots
+@bot.command()
+async def interval(ctx, *, param=None):
     try:
-        for i in range(10000):
-            path = f"SCREENSHOT SAVE LOCATION/Screenshots/{screenshot_number}.png"
-            driver.save_screenshot(path)
-            if i != 0:
-                previous_img = f"SCREENSHOT SAVE LOCATION/Screenshot Bot/Screenshots/{screenshot_number - 1}.png"
-                current_img = f"SCREENSHOT SAVE LOCATION/Screenshots/{screenshot_number}.png"
+        capture.change_interval(minutes=int(param))
+        await ctx.send(f"Interval change to {int(param)} minutes")
+    except (TypeError, ValueError):
+        await ctx.send("!interval needs a integer parameter that represents 'minutes'")
 
-                if open(previous_img, "rb").read() == open(current_img, "rb").read():
-                    os.unlink(current_img)
-                    break
+@bot.command()
+async def status(ctx, *, param=None):
+    message = ""
+    for name, event in event_dict.items():
+        message += f"Screenshot on {name} is functioning: {bool(event) and not event.cancelled()}\n"
+    await ctx.send(message)
 
-    # Concatenates all of the small screenshots into one big image
-            im1 = Image.open(f"SCREENSHOT SAVE LOCATION/Screenshot Bot/Screenshots/0.png")
-            dst = Image.new('RGB', (1920, 888 + 888 * i))
-            dst.paste(im1, (0, 0))
-            k = 1
+@bot.command()
+async def start(ctx, *, param=None):
+    channel = param if param != None else get_channel(ctx)
+    print(channel)
+    if channel in url_dict:
+        event_dict[channel] = capture.start(ctx, channel)
+        await ctx.send(f"{channel} screenshot start!")
 
-            while k <= i:
-                if k == i:
-                    # Fix this so that the final picture doesn't look like it's cut
-                    # Also make it so that it deletes all of the other screenshots and only keeps the final one
-                    # Change the name of the final screenshot to the id of the screenshot page
-                    dst.paste(Image.open(f"SCREENSHOT SAVE LOCATION/Screenshot Bot/Screenshots/{k}.png"), (0, 850 * k))
-                    break
-                dst.paste(Image.open(f"SCREENSHOT SAVE LOCATION/Screenshot Bot/Screenshots/{k}.png"), (0, 850 * k))
-                k += 1
+@bot.command()
+async def stop(ctx, *, param=None):
+    channel = param if param != None else get_channel(ctx)
+    if channel in event_dict.keys():
+        stop_event(event_dict, channel)
+        await ctx.send(f"{channel} screenshot stop!")
 
-            dst.save("SCREENSHOT SAVE LOCATION/Screenshots/Final_Picture.png")
+def stop_event(event_dict, param):
+    try:
+        event = event_dict[param]
+        event.cancel()
+    except Exception as e:
+        print(e)
 
-            element.send_keys(Keys.DOWN * 17)
-            screenshot_number += 1
-            time.sleep(0.5)
+def get_channel(ctx):
+    return str(ctx.message.channel)
 
-        await ctx.send(file=discord.File(f"SCREENSHOT SAVE LOCATION/Screenshots/Final_Picture.png"))
-
-    except:
-        print('Error: Task not completed.')
-
-    # Closes the browser
-    driver.quit()
-
-    print('Screenshots taken')
-
-
-client.run(TOKEN)
+bot.run(os.getenv('TOKEN'))
