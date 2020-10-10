@@ -7,21 +7,25 @@ import cv2
 import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
-
 load_dotenv()
-bot = commands.Bot(command_prefix='!', help_command=None)
+
+TOKEN = os.getenv('TOKEN')
+DEFAULT_INTERVAL = os.getenv('DEFAULT_INTERVAL')
+TRACK1_URL = os.getenv('TRACK1_URL')
+TRACK2_URL = os.getenv('TRACK2_URL')
+TRACK3_URL = os.getenv('TRACK3_URL')
+
+bot = commands.Bot(command_prefix='!')
 SCREENSHOT_SAVE_LOCATION = os.getcwd()
 url_dict = {
-    'r1-peek': os.getenv('TRACK1_URL'),
-    'r2-peek': os.getenv('TRACK2_URL'),
-    'r3-peek': os.getenv('TRACK3_URL'),
-    'test-peek': os.getenv('TRACK1_URL')
+    'r1-track': TRACK1_URL,
+    'r2-track': TRACK2_URL,
+    'r3-track': TRACK3_URL,
 }
 event_dict = {
-    'r1-peek': None,
-    'r2-peek': None,
-    'r3-peek': None,
-    'test-peek': None
+    'r1-track': None,
+    'r2-track': None,
+    'r3-track': None,
 }
 
 # ---------------------------------------
@@ -29,13 +33,13 @@ event_dict = {
 # ---------------------------------------
 @bot.event
 async def on_ready():
-    print('Bot is ready.')
+    print('Screenshot bot is ready.')
 
 
 # ---------------------------------------
 # Capture function
 # ---------------------------------------
-@tasks.loop(minutes=float(os.getenv('DEFAULT_INTERVAL')))
+@tasks.loop(minutes=float(DEFAULT_INTERVAL))
 async def capture(ctx, channel):
     url = url_dict[channel]
     print(url)
@@ -54,11 +58,17 @@ async def capture(ctx, channel):
     cap.release()
     print(f'{str_time} screenshots taken')
 
+# ---------------------------------------
+# Check function
+# ---------------------------------------
+def is_from_staff(ctx):
+    return '2020-staff' in [role.name for role in ctx.message.author.roles]
 
 # ---------------------------------------
 # Command
 # ---------------------------------------
 @bot.command()
+@commands.check(is_from_staff)
 async def interval(ctx, *, param=None):
     try:
         capture.change_interval(minutes=int(param))
@@ -67,6 +77,7 @@ async def interval(ctx, *, param=None):
         await ctx.send("!interval needs a integer parameter that represents 'minutes'")
 
 @bot.command()
+@commands.check(is_from_staff)
 async def status(ctx, *, param=None):
     message = ""
     for name, event in event_dict.items():
@@ -74,6 +85,7 @@ async def status(ctx, *, param=None):
     await ctx.send(message)
 
 @bot.command()
+@commands.check(is_from_staff)
 async def start(ctx, *, param=None):
     channel = param if param != None else get_channel(ctx)
     print(channel)
@@ -82,6 +94,7 @@ async def start(ctx, *, param=None):
         await ctx.send(f"{channel} screenshot start!")
 
 @bot.command()
+@commands.check(is_from_staff)
 async def stop(ctx, *, param=None):
     channel = param if param != None else get_channel(ctx)
     if channel in event_dict.keys():
@@ -98,4 +111,4 @@ def stop_event(event_dict, param):
 def get_channel(ctx):
     return str(ctx.message.channel)
 
-bot.run(os.getenv('TOKEN'))
+bot.run(TOKEN)
