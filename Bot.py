@@ -1,5 +1,4 @@
 import os
-import time
 from datetime import datetime as dt
 
 import pafy
@@ -11,6 +10,7 @@ load_dotenv()
 
 TOKEN = os.getenv('TOKEN')
 DEFAULT_INTERVAL = os.getenv('DEFAULT_INTERVAL')
+TRACK0_URL = os.getenv('TRACK0_URL')
 TRACK1_URL = os.getenv('TRACK1_URL')
 TRACK2_URL = os.getenv('TRACK2_URL')
 TRACK3_URL = os.getenv('TRACK3_URL')
@@ -18,11 +18,15 @@ TRACK3_URL = os.getenv('TRACK3_URL')
 bot = commands.Bot(command_prefix='!')
 SCREENSHOT_SAVE_LOCATION = os.getcwd()
 url_dict = {
+    'keynote-track': TRACK0_URL,
+    'r0-track': TRACK0_URL,
     'r1-track': TRACK1_URL,
     'r2-track': TRACK2_URL,
     'r3-track': TRACK3_URL,
 }
 event_dict = {
+    'keynote-track': None,
+    'r0-track': None,
     'r1-track': None,
     'r2-track': None,
     'r3-track': None,
@@ -48,7 +52,7 @@ async def capture(ctx, channel):
     play = vPafy.getbest()
     
     cap = cv2.VideoCapture(play.url)
-    ret, img = cap.read()
+    _, img = cap.read()
 
     now = dt.now()
     str_time = now.strftime("%Y%m%d_%H%M")
@@ -61,14 +65,14 @@ async def capture(ctx, channel):
 # ---------------------------------------
 # Check function
 # ---------------------------------------
-def is_from_staff(ctx):
-    return '2020-staff' in [role.name for role in ctx.message.author.roles]
+def is_from_discord_manager(ctx):
+    return 'discord manager' in [role.name for role in ctx.message.author.roles]
 
 # ---------------------------------------
 # Command
 # ---------------------------------------
 @bot.command()
-@commands.check(is_from_staff)
+@commands.check(is_from_discord_manager)
 async def interval(ctx, *, param=None):
     try:
         capture.change_interval(minutes=int(param))
@@ -77,7 +81,7 @@ async def interval(ctx, *, param=None):
         await ctx.send("!interval needs a integer parameter that represents 'minutes'")
 
 @bot.command()
-@commands.check(is_from_staff)
+@commands.check(is_from_discord_manager)
 async def status(ctx, *, param=None):
     message = ""
     for name, event in event_dict.items():
@@ -85,7 +89,7 @@ async def status(ctx, *, param=None):
     await ctx.send(message)
 
 @bot.command()
-@commands.check(is_from_staff)
+@commands.check(is_from_discord_manager)
 async def start(ctx, *, param=None):
     channel = param if param != None else get_channel(ctx)
     print(channel)
@@ -94,7 +98,7 @@ async def start(ctx, *, param=None):
         await ctx.send(f"{channel} screenshot start!")
 
 @bot.command()
-@commands.check(is_from_staff)
+@commands.check(is_from_discord_manager)
 async def stop(ctx, *, param=None):
     channel = param if param != None else get_channel(ctx)
     if channel in event_dict.keys():
@@ -105,6 +109,7 @@ def stop_event(event_dict, param):
     try:
         event = event_dict[param]
         event.cancel()
+        event_dict[param] = None
     except Exception as e:
         print(e)
 
